@@ -1,0 +1,12 @@
+{
+	"folders": [
+		{
+			"path": "../dj_mixer"
+		},
+		{
+			"name": "Walking bot",
+			"path": "."
+		}
+	],
+	"settings": {}
+}
