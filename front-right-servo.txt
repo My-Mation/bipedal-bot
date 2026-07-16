@@ -1,0 +1,198 @@
+/*
+ * ESP32 + MX1508 Closed-Loop "Smart Servo" Controller
+ * ----------------------------------------------------
+ * Complete, integrated version with linear tracking, 
+ * smooth counter-torque opposition, and anti-wrap edge protection.
+ * Starting pos is 50 so move the leg at sitting pos from 70 to 80 and the standing pos is 2200 so go till 2000
+ */
+
+#include <Arduino.h>
+
+// ---------------- Pin configuration ----------------
+static const int PIN_POT   = 34;   // ADC input, potentiometer wiper
+static const int PIN_IN1   = 18;   // MX1508 IN1 (PWM)
+static const int PIN_IN2   = 19;   // MX1508 IN2 (PWM)
+
+// ---------------- PWM configuration ----------------
+static const int PWM_FREQ_HZ   = 20000;  // 20 kHz inaudible frequency
+static const int PWM_RES_BITS  = 8;      // 0-255 duty range
+static const int PWM_MAX       = (1 << PWM_RES_BITS) - 1;
+
+// ---------------- Position scale ----------------
+static const long ADC_MAX = 4096;        // Native ADC scale
+
+// ---------------- Control loop timing ----------------
+static const unsigned long LOOP_PERIOD_MS = 10;  // 100 Hz control loop
+
+// ---------------- Tunable parameters ----------------
+// ---------------- Tunable parameters ----------------
+float Kp = 0.55f;     // Increased from 0.22: Much higher holding torque/stiffness
+float Ki = 0.05f;     // Increased from 0.02: Eliminates slow creeping over short distances
+float Kd = 0.08f;     // Increased from 0.04: Higher damping to stop oscillation from the higher Kp
+
+int   DEADBAND  = 6;  // Tightened slightly for better accuracy
+int   MIN_PWM   = 70; // Increased: Gives a stronger base voltage to overcome gear friction
+
+// CRITICAL FIXES FOR INSTANT POWER:
+int   MAX_PWM_STEP_PER_LOOP = 90;  // Increased from 25: Unlocks instant acceleration
+float INTEGRAL_LIMIT_PWM    = 80.0f; // Allows the integral term to build more correction force
+float ADC_FILTER_ALPHA      = 0.6f;  // Makes the position reading more real-time
+
+// ---------------- State variables ----------------
+long targetPosition    = 2048;   
+float filteredAdc      = 0;
+bool filterInit        = false;
+
+float integralAccum     = 0;
+long lastPosition       = 0;
+bool lastPositionInit  = false;
+int currentOutputPwm  = 0;   
+
+unsigned long lastLoopMs = 0;
+
+// ---------------- Helper: Linear Track Difference ----------------
+// Blocks the 0/4095 shortcut so the servo never tries to cross 
+// the physical dead-zone gap under its own power.
+long circularDiff(long a, long b) {
+  return a - b; 
+}
+
+// ---------------- Motor drive ----------------
+// Phase-corrected direction control matching your potentiometer orientation
+void driveMotor(int signedPwm) {
+  signedPwm = constrain(signedPwm, -PWM_MAX, PWM_MAX);
+  
+  if (signedPwm > 0) {
+    ledcWrite(PIN_IN1, 0);            
+    ledcWrite(PIN_IN2, signedPwm);    
+  } else if (signedPwm < 0) {
+    ledcWrite(PIN_IN1, -signedPwm);   
+    ledcWrite(PIN_IN2, 0);            
+  } else {
+    ledcWrite(PIN_IN1, 0);
+    ledcWrite(PIN_IN2, 0);
+  }
+}
+
+// ---------------- Setup ----------------
+void setup() {
+  Serial.begin(115200);
+  delay(200);
+
+  analogReadResolution(12);          
+  analogSetPinAttenuation(PIN_POT, ADC_11db); 
+
+  ledcAttach(PIN_IN1, PWM_FREQ_HZ, PWM_RES_BITS);
+  ledcAttach(PIN_IN2, PWM_FREQ_HZ, PWM_RES_BITS);
+  driveMotor(0);
+
+  // Initialize filters with boot readings to prevent lurching
+  long initial = analogRead(PIN_POT);
+  filteredAdc = initial;
+  filterInit = true;
+  lastPosition = initial;
+  lastPositionInit = true;
+  targetPosition = initial;  
+
+  lastLoopMs = millis();
+  Serial.println("Servo controller active. Ready for targets.");
+}
+
+// ---------------- Serial command handling ----------------
+void handleSerial() {
+  if (Serial.available()) {
+    String line = Serial.readStringUntil('\n');
+    line.trim();
+    if (line.length() == 0) return;
+
+    long val = line.toInt();
+    // Clamp target strictly away from extreme edges
+    val = constrain(val, 50, 3950);
+    targetPosition = val;
+    integralAccum = 0; // Clear windup on new target
+    Serial.printf("New target set inside safe limits: %ld\n", targetPosition);
+  }
+}
+
+// ---------------- Main control loop ----------------
+void loop() {
+  handleSerial();
+
+  unsigned long now = millis();
+  if (now - lastLoopMs < LOOP_PERIOD_MS) return; 
+  float dt = (now - lastLoopMs) / 1000.0f;
+  lastLoopMs = now;
+
+  // 1. Read and filter position
+  long raw = analogRead(PIN_POT);
+  if (!filterInit) {
+    filteredAdc = raw;
+    filterInit = true;
+  } else {
+    filteredAdc += ADC_FILTER_ALPHA * (raw - filteredAdc);
+  }
+  long position = (long)(filteredAdc + 0.5f);
+
+  // 2. Smooth Boundary Protection
+  // If pushed past the physical limit into the wrap zone (4000-4095 or near 0), 
+  // we temporarily shift the tracking target to pull it safely back onto the track.
+  long activeTarget = targetPosition;
+  if (position > 3980 || position < 20) {
+    activeTarget = (position > 2048) ? 3950 : 50;
+  }
+
+  // 3. Compute error (Strictly linear via our updated circularDiff function)
+  long error = circularDiff(activeTarget, position);
+  long absError = labs(error);
+
+  int outputPwm = 0;
+
+  // 4. PID Loop & Counter-Force Calculation
+  if (absError <= DEADBAND) {
+    outputPwm = 0;
+    integralAccum = 0;
+  } else {
+    integralAccum += error * dt;
+    integralAccum = constrain(integralAccum, -INTEGRAL_LIMIT_PWM / Ki, INTEGRAL_LIMIT_PWM / Ki);
+    
+    float pTerm = Kp * error;
+    float iTerm = Ki * integralAccum;
+    
+    float dTerm = 0;
+    if (lastPositionInit) {
+      long posDelta = circularDiff(position, lastPosition);
+      dTerm = -Kd * (posDelta / dt);
+    }
+
+    float desired = pTerm + iTerm + dTerm;
+
+    // Smooth friction compensation
+    if (desired > 0) {
+      desired = constrain(desired + MIN_PWM, MIN_PWM, PWM_MAX);
+    } else {
+      desired = constrain(desired - MIN_PWM, -PWM_MAX, -MIN_PWM);
+    }
+
+    outputPwm = (int)desired;
+  }
+
+  // 5. Acceleration Limiter (Eliminates the jerk, handles opposition smoothly)
+  int pwmDelta = outputPwm - currentOutputPwm;
+  pwmDelta = constrain(pwmDelta, -MAX_PWM_STEP_PER_LOOP, MAX_PWM_STEP_PER_LOOP);
+  currentOutputPwm += pwmDelta;
+  currentOutputPwm = constrain(currentOutputPwm, -PWM_MAX, PWM_MAX);
+
+  // 6. Drive Motor
+  driveMotor(currentOutputPwm);
+
+  lastPosition = position;
+  lastPositionInit = true;
+
+  // Telemetry monitoring
+  static unsigned long lastPrint = 0;
+  if (now - lastPrint > 150) {
+    lastPrint = now;
+    Serial.printf("Pos: %4ld | Tgt: %4ld | Err: %4ld | PWM: %4d\n", 
+                  position, activeTarget, error, currentOutputPwm);
+  }
+}
