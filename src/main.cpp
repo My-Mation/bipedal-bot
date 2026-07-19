@@ -26,6 +26,11 @@
 void setup() {
   Serial.begin(115200);
 
+  // Configure ADC for battery monitoring (GPIO35 via 30k/10k divider)
+  // 11 dB attenuation → full-scale 0–3.3 V (matches BAT_VREF in config.h)
+  analogSetAttenuation(ADC_11db);
+  analogReadResolution(12);   // 12-bit: 0–4095
+
   initServos();        // attach all servos, write home positions
   initIMU();           // start MPU6050 on D21/D22
   initWiFi();          // start AP hotspot + web server

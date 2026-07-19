@@ -17,6 +17,7 @@
 
 #include <WiFi.h>
 #include <ESPAsyncWebServer.h>
+#include <Arduino.h>
 #include "wifi_server.h"
 #include "html_page.h"
 #include "gait.h"
@@ -24,6 +25,25 @@
 #include "commands.h"
 #include "config.h"
 #include "imu.h"
+
+// ---------------------------------------------------------------
+// readBatteryPercent — 16× oversampled ADC read on BAT_PIN (GPIO35)
+// Voltage divider: Battery+ -> 30kΩ -> GPIO35 -> 10kΩ -> GND
+// Returns 0–100 (clamped).
+// ---------------------------------------------------------------
+static int readBatteryPercent() {
+  long raw = 0;
+  for (int i = 0; i < BAT_SAMPLES; i++) raw += analogRead(BAT_PIN);
+  raw /= BAT_SAMPLES;
+
+  // Reconstruct actual battery voltage
+  float v_gpio = (raw / BAT_ADC_MAX) * BAT_VREF;   // voltage at GPIO35
+  float v_bat  = v_gpio / BAT_DIVIDER;              // actual battery voltage
+
+  // Map to 0-100 %
+  float pct = (v_bat - BAT_EMPTY_V) / (BAT_FULL_V - BAT_EMPTY_V) * 100.f;
+  return (int)constrain(pct, 0.f, 100.f);
+}
 
 // ---------------------------------------------------------------
 // Access Point credentials
@@ -59,7 +79,9 @@ static const char* stateName() {
 void broadcastStatus() {
   if (ws.count() == 0) return;
 
-  char buf[320];
+  int bat = readBatteryPercent();
+
+  char buf[384];
   snprintf(buf, sizeof(buf),
     "{"
       "\"state\":\"%s\","
@@ -68,7 +90,8 @@ void broadcastStatus() {
       "\"pitch\":%.1f,\"roll\":%.1f,"
       "\"ax\":%.2f,\"ay\":%.2f,\"az\":%.2f,"
       "\"gx\":%.2f,\"gy\":%.2f,\"gz\":%.2f,"
-      "\"temp\":%.1f,\"imu\":%d"
+      "\"temp\":%.1f,\"imu\":%d,"
+      "\"bat\":%d"
     "}",
     stateName(), stepInterval,
     currentPos[0], currentPos[1], currentPos[2],
@@ -76,7 +99,8 @@ void broadcastStatus() {
     imuData.pitch, imuData.roll,
     imuData.ax, imuData.ay, imuData.az,
     imuData.gx, imuData.gy, imuData.gz,
-    imuData.temp, (int)imuData.ok
+    imuData.temp, (int)imuData.ok,
+    bat
   );
 
   ws.textAll(buf);
@@ -157,8 +181,8 @@ void tickWifi() {
 
   if (now - lastBcast >= 100) {
     lastBcast = now;
-    readIMU();           // sample sensor
-    broadcastStatus();   // push JSON to all clients
+    readIMU();           // sample MPU6050 (no-op if not detected)
+    broadcastStatus();   // push JSON with IMU + battery to all clients
   }
 
   ws.cleanupClients();

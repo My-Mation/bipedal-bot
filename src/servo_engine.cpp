@@ -120,6 +120,11 @@ void setTarget(int index, int value) {
 // Reached checks.
 // ---------------------------------------------------------------
 bool servoReached(int index) {
+  if (index == 2) {
+    // S3 is a smart servo: position = ADC count (0-4095), always slightly noisy.
+    // Use a deadband instead of strict equality to prevent the gait from stalling.
+    return abs(currentPos[index] - targetPos[index]) <= S3_REACHED_DEADBAND;
+  }
   return currentPos[index] == targetPos[index];
 }
 

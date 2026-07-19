@@ -115,6 +115,14 @@ body::after{
 .pr-cell{flex:1;background:var(--surf2);border:1px solid var(--border);border-radius:10px;padding:.5rem .7rem;display:flex;justify-content:space-between;align-items:baseline}
 .pr-lbl{font-size:.6rem;color:var(--muted);text-transform:uppercase;letter-spacing:.07em}
 .pr-num{font-size:.9rem;font-weight:800;color:var(--acc2);font-variant-numeric:tabular-nums}
+
+/* ---- Battery indicator ---- */
+.bat-wrap{display:flex;align-items:center;gap:.45rem;flex-shrink:0}
+.bat-icon{display:flex;align-items:center;gap:2px}
+.bat-body{width:28px;height:14px;border:1.5px solid rgba(255,255,255,0.25);border-radius:3px;position:relative;overflow:hidden;background:var(--surf2)}
+.bat-tip{width:3px;height:7px;background:rgba(255,255,255,0.2);border-radius:0 2px 2px 0;flex-shrink:0}
+.bat-fill{height:100%;border-radius:1.5px;transition:width .6s cubic-bezier(.4,0,.2,1),background-color .4s}
+.bat-pct{font-size:.68rem;font-weight:700;color:var(--txt);font-variant-numeric:tabular-nums;min-width:28px}
 </style>
 </head>
 <body>
@@ -128,6 +136,14 @@ body::after{
     <div class="sinfo">
       <div class="dot" id="dot"></div>
       <span class="stxt" id="stxt">Connecting&hellip;</span>
+    </div>
+    <!-- Battery indicator -->
+    <div class="bat-wrap" id="batWrap" title="Battery voltage">
+      <div class="bat-icon">
+        <div class="bat-body"><div class="bat-fill" id="batFill" style="width:0%"></div></div>
+        <div class="bat-tip"></div>
+      </div>
+      <span class="bat-pct" id="batPct">&mdash;</span>
     </div>
     <div class="badge" id="badge">IDLE</div>
   </div>
@@ -254,24 +270,57 @@ function mkCell(id,label,init){
 let imuBuilt=false;
 function updateIMU(d){
   if(!d.imu){
-    document.getElementById('imuBody').innerHTML='<div class="imu-offline">&#x26A0; MPU6050 not detected on D21/D22</div>';
+    // MPU6050 offline — show the panel but with dashes
+    if(!imuBuilt){buildIMU();imuBuilt=true;}
+    ['iPitch','iRoll','ax','ay','az','gx','gy','gz','tmp'].forEach(id=>{
+      const el=document.getElementById(id);
+      if(el) el.textContent='\u2014';
+    });
+    document.getElementById('ball').setAttribute('cx',55);
+    document.getElementById('ball').setAttribute('cy',55);
+    // Add offline badge inside IMU card title if not already
+    const lbl=document.querySelector('.imu-card .clabel');
+    if(lbl&&!lbl.dataset.offline){
+      lbl.dataset.offline='1';
+      lbl.innerHTML='IMU &mdash; MPU6050 <span style="color:var(--stop);font-size:.6rem;vertical-align:middle">&bull; OFFLINE</span>';
+    }
     return;
   }
+  // IMU online
+  const lbl=document.querySelector('.imu-card .clabel');
+  if(lbl&&lbl.dataset.offline){
+    delete lbl.dataset.offline;
+    lbl.innerHTML='IMU &mdash; MPU6050 (D21/D22)';
+  }
   if(!imuBuilt){buildIMU();imuBuilt=true;}
-  document.getElementById('iPitch').textContent=d.pitch.toFixed(1)+'°';
-  document.getElementById('iRoll').textContent=d.roll.toFixed(1)+'°';
-  document.getElementById('ax').textContent=d.ax.toFixed(2)+' m/s²';
-  document.getElementById('ay').textContent=d.ay.toFixed(2)+' m/s²';
-  document.getElementById('az').textContent=d.az.toFixed(2)+' m/s²';
+  document.getElementById('iPitch').textContent=d.pitch.toFixed(1)+'\u00b0';
+  document.getElementById('iRoll').textContent=d.roll.toFixed(1)+'\u00b0';
+  document.getElementById('ax').textContent=d.ax.toFixed(2)+' m/s\u00b2';
+  document.getElementById('ay').textContent=d.ay.toFixed(2)+' m/s\u00b2';
+  document.getElementById('az').textContent=d.az.toFixed(2)+' m/s\u00b2';
   document.getElementById('gx').textContent=d.gx.toFixed(2)+' r/s';
   document.getElementById('gy').textContent=d.gy.toFixed(2)+' r/s';
   document.getElementById('gz').textContent=d.gz.toFixed(2)+' r/s';
-  document.getElementById('tmp').textContent=d.temp.toFixed(1)+'°C';
-  // Bubble: map ±45° → ±38px
+  document.getElementById('tmp').textContent=d.temp.toFixed(1)+'\u00b0C';
+  // Bubble: map \u00b145\u00b0 \u2192 \u00b138px
   const bx=Math.max(-38,Math.min(38,-d.roll/45*38));
   const by=Math.max(-38,Math.min(38,d.pitch/45*38));
   document.getElementById('ball').setAttribute('cx',55+bx);
   document.getElementById('ball').setAttribute('cy',55+by);
+}
+
+// \u2500\u2500\u2500 Battery \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500
+function updateBattery(pct){
+  if(pct==null)return;
+  const fill=document.getElementById('batFill');
+  const label=document.getElementById('batPct');
+  if(!fill||!label)return;
+  fill.style.width=pct+'%';
+  label.textContent=pct+'%';
+  // Color: green > 50%, yellow 20-50%, red < 20%
+  let col=pct>50?'#22d472':pct>20?'#f59e0b':'#ff4d6d';
+  fill.style.backgroundColor=col;
+  label.style.color=col;
 }
 
 // ─── WebSocket ────────────────────────────────────────────────────────
@@ -310,6 +359,8 @@ function connect(){
       if(d.pos&&d.pos.length===6){d.pos.forEach((p,i)=>setGauge(i,p));}
       // IMU
       updateIMU(d);
+      // Battery
+      if(d.bat!=null) updateBattery(d.bat);
     }catch(ex){}
   };
 }
