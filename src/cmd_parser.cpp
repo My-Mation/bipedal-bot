@@ -1,5 +1,6 @@
 #include "cmd_parser.h"
 #include "motion_queue.h"
+#include "servo_engine.h"
 #include "ws_manager.h"
 #include "config.h"
 #include "buzzer.h"
@@ -35,6 +36,12 @@ void parseCommand(const char* data, size_t len) {
   }
   else if (strcmp(type, "home") == 0) {
     motionGoHome();
+  }
+  else if (strcmp(type, "sit") == 0) {
+    sitDown();
+  }
+  else if (strcmp(type, "auto") == 0) {
+    // Enable/disable continuous auto sit-stand mode
   }
   else if (strcmp(type, "clearQueue") == 0) {
     motionClearQueue();
