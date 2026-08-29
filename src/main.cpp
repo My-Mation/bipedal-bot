@@ -139,36 +139,28 @@ static void runContinuousSitStand() {
     case STATE_SITTING_DOWN:
       Serial.println("[AUTO] Moving all 6 servos to SIT position...");
       sitDown();
-      stateTimer = 0;
+      stateTimer = now;
       autoState = STATE_WAIT_SIT;
       break;
 
     case STATE_WAIT_SIT:
-      if (allServosIdle()) {
-        if (stateTimer == 0) {
-          stateTimer = now;
-        } else if (now - stateTimer >= 2500) {
-          stateTimer = 0;
-          autoState = STATE_STANDING_UP;
-        }
+      // Hold sit position for 3.0 seconds, then transition to standing
+      if (now - stateTimer >= 3000) {
+        autoState = STATE_STANDING_UP;
       }
       break;
 
     case STATE_STANDING_UP:
       Serial.println("[AUTO] Moving all 6 servos to STAND (HOME) position...");
       goHomeAll();
-      stateTimer = 0;
+      stateTimer = now;
       autoState = STATE_WAIT_STAND;
       break;
 
     case STATE_WAIT_STAND:
-      if (allServosIdle()) {
-        if (stateTimer == 0) {
-          stateTimer = now;
-        } else if (now - stateTimer >= 2500) {
-          stateTimer = 0;
-          autoState = STATE_SITTING_DOWN;
-        }
+      // Hold stand position for 3.0 seconds, then transition to sitting
+      if (now - stateTimer >= 3000) {
+        autoState = STATE_SITTING_DOWN;
       }
       break;
   }
