@@ -1,0 +1,130 @@
+Bipedal Walking Robot - Comprehensive Tutorial
+==============================================
+
+This document provides an in-depth look at the kinematic configuration, actuator mapping, and gait cycle mechanics used to control the 6-servo bipedal robot.
+
+--------------------------------------------------------------------------------
+1. Kinematic Configuration & Servo Ranges
+--------------------------------------------------------------------------------
+
+The robot consists of 6 actuators, divided into 4 legs (S1-S4) for lifting/clearance, 1 slider (S5) for forward/backward translation, and 1 rotator (S6) for turning.
+
+Each standard servo is controlled using PWM microsecond (µs) pulse widths. The limits below guarantee hardware safety and prevent mechanical stalling or breakage. 
+
+[S1] Front-Left Leg
+  - Hardware Min Limit: 1000 µs
+  - Hardware Max Limit: 2500 µs
+  - Total Safe Range: 1500 µs
+  - Sitting Position (Fully Bent): 1000 µs
+  - Standing/Home Position (Extended): 2350 µs
+  - Lift Position (Airborne): 1000 µs
+
+[S2] Back-Right Leg
+  - Hardware Min Limit: 500 µs
+  - Hardware Max Limit: 1600 µs
+  - Total Safe Range: 1100 µs
+  - Sitting Position (Fully Bent): 1600 µs
+  - Standing/Home Position (Extended): 500 µs
+  - Lift Position (Airborne): 1100 µs
+
+[S4] Back-Left Leg
+  - Hardware Min Limit: 500 µs
+  - Hardware Max Limit: 1500 µs
+  - Total Safe Range: 1000 µs
+  - Sitting Position (Fully Bent): 500 µs
+  - Standing/Home Position (Extended): 1500 µs
+  - Lift Position (Airborne): 1000 µs
+
+[S5] Slider - Forward/Backward Locomotion
+  - Hardware Min Limit: 1200 µs (Max Extension Forward)
+  - Hardware Max Limit: 2500 µs (Home)
+  - Total Safe Range: 1300 µs
+  - Sitting Position: 2500 µs
+  - Standing/Home Position: 2500 µs
+
+[S6] Rotator - Left/Right Turning Locomotion
+  - Hardware Min Limit: 1700 µs (Turn Position)
+  - Hardware Max Limit: 2500 µs (Home)
+  - Total Safe Range: 800 µs
+  - Sitting Position: 2500 µs
+  - Standing/Home Position: 2500 µs
+
+--------------------------------------------------------------------------------
+2. The "Smart Servo" Exception - Servo 3 (S3)
+--------------------------------------------------------------------------------
+
+Unlike S1, S2, S4, S5, and S6 which are standard hobby servos, **S3 (Front-Right Leg)** is a custom "Smart Servo". 
+It is driven mechanically by an MX1508 motor driver chip and uses an analog potentiometer on the joint to provide physical position feedback to the ESP32.
+
+Because it is not a standard PWM servo, its position is read using the ESP32's ADC (Analog-to-Digital Converter) as raw 12-bit counts (from 0 to 4095) rather than µs pulse widths. 
+
+Hardware Pin Assignments:
+  - Servo 1 (Front-Left):  GPIO13
+  - Servo 2 (Back-Right):  GPIO14
+  - Servo 3 (Front-Right): MX1508 IN1 (GPIO18), IN2 (GPIO19), POT Wiper (GPIO33)
+  - Servo 4 (Back-Left):   GPIO26
+  - Servo 5 (Slider):      GPIO25
+  - Servo 6 (Rotator):     GPIO27
+  - MPU6050:              SDA (GPIO21), SCL (GPIO22)
+  - GPS (GY-GPS6MV2):     RX2 (GPIO16 ← GPS TX), TX2 (GPIO17 → GPS RX)
+  - Buzzer:               Control (GPIO23 → 1kΩ → BC548B Base)
+  - Unused / Reserved:    GPIO35 (Reserved for future battery monitor), GPIO34 (Unused), GPIO5 (Spare)
+
+[S3] Front-Right Leg (SMART SERVO)
+  - Hardware Min Limit: 50 ADC counts
+  - Hardware Max Limit: 3950 ADC counts
+  - Total Safe Range: 3900 ADC counts
+  - Sitting Position (Fully Bent): 75 ADC counts
+  - Standing/Home Position (Extended): 2000 ADC counts
+  - Lift Position (Airborne): 1000 ADC counts
+  - Reached Deadband: 30 ADC counts (required to prevent stalling due to noisy analog readings).
+
+How S3 Works Internally:
+Instead of sending a target PWM signal, the firmware runs a custom PID (Proportional, Integral, Derivative) control loop at 100Hz (10ms period). 
+1. The ADC reads the potentiometer. 
+2. A low-pass filter (Alpha = 0.6) smooths the noisy ADC reading. 
+3. The PID controller compares the target ADC count to the current ADC count, calculates an error, and outputs a signed PWM duty cycle (-255 to 255) to the MX1508 driver pins (IN1/IN2) to push the motor toward the target.
+
+--------------------------------------------------------------------------------
+3. The 6-Step Gait Cycle Engine
+--------------------------------------------------------------------------------
+
+The bipedal walking mechanism uses a diagonal pairing strategy for balance. 
+- Pair A = S1 (Front-Left) & S2 (Back-Right)
+- Pair B = S3 (Front-Right) & S4 (Back-Left)
+
+At any given time, one diagonal pair acts as the grounded anchor (supporting the body), while the other diagonal pair is lifted in the air (swing phase). The Slider (S5) and Rotator (S6) shift the center of gravity and provide locomotion while a pair is grounded.
+
+A complete movement (e.g., Forward Walk, Turn Left) requires executing a full 6-step state machine. The system pauses for `HOLD_MS` (150ms) between each step to let inertia settle.
+
+### 3.1 Forward Walking Cycle (2 Complete Steps)
+
+Walking forward relies on alternating leg lifts and sliding the main body (S5).
+
+STEP 1: The First Step Forward
+  - [Step 0] Swing Phase A: Lift Pair A (S1, S2) into the air. The robot is now balancing on grounded Pair B (S3, S4).
+  - [Step 1] Locomotion: Move Slider S5 to `SLIDE_FORWARD` (1200µs). Because Pair B is planted on the ground, sliding the mechanism forward pushes the lifted legs (Pair A) forward in space.
+  - [Step 2] Plant Phase A: Lower Pair A (S1, S2) back to the ground (`HOME_POS`). All four legs are now touching the floor.
+
+STEP 2: The Second Step Forward
+  - [Step 3] Swing Phase B: Lift Pair B (S3, S4) into the air. The robot is now balancing on the newly planted Pair A (S1, S2).
+  - [Step 4] Locomotion: Move Slider S5 to `SLIDE_HOME` (2500µs). Because Pair A is planted, pulling the slider back to home drags the lifted legs (Pair B) forward to catch up.
+  - [Step 5] Plant Phase B: Lower Pair B (S3, S4) back to the ground. Cycle complete.
+
+(Note: Backward walking executes the exact same sliding logic, but lifts Pair B first instead of Pair A, reversing the direction of travel).
+
+### 3.2 Left Turning Cycle (2 Complete Steps)
+
+Turning uses the exact same lifting logic as walking, but instead of the linear Slider (S5), it uses the Rotator (S6).
+
+STEP 1: The First Turning Step
+  - [Step 0] Swing Phase A: Lift Pair A (S1, S2) into the air. Balance on grounded Pair B.
+  - [Step 1] Locomotion: Move Rotator S6 to `ROTATE_TURN` (1700µs). This physically twists the lifted legs (Pair A) to the left relative to the grounded legs.
+  - [Step 2] Plant Phase A: Lower Pair A (S1, S2) back to the ground. The robot's legs are now crossed/twisted.
+
+STEP 2: The Second Turning Step
+  - [Step 3] Swing Phase B: Lift Pair B (S3, S4) into the air. Balance on grounded Pair A.
+  - [Step 4] Locomotion: Move Rotator S6 to `ROTATE_HOME` (2500µs). With Pair A firmly planted, rotating the mechanism back to home untwists the body, dragging the lifted Pair B through the air to align with the new heading.
+  - [Step 5] Plant Phase B: Lower Pair B (S3, S4) back to the ground. Cycle complete, heading changed.
+
+(Note: Turning Right is identical, but lifts Pair B first, effectively reversing the rotational twist).

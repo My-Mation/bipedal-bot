@@ -14,6 +14,7 @@
 #include <Wire.h>
 #include <math.h>
 #include "imu.h"
+#include "config.h"
 
 // ── MPU6050 register map ────────────────────────────────────────────
 static constexpr uint8_t MPU_ADDR     = 0x68;
@@ -50,34 +51,52 @@ static uint8_t readReg(uint8_t reg) {
 
 // ── initIMU ─────────────────────────────────────────────────────────
 bool initIMU() {
-  Wire.begin(21, 22);    // SDA=GPIO21, SCL=GPIO22
+  pinMode(MPU_SDA_PIN, INPUT_PULLUP);
+  pinMode(MPU_SCL_PIN, INPUT_PULLUP);
+  delay(5);
+  if (digitalRead(MPU_SDA_PIN) == LOW || digitalRead(MPU_SCL_PIN) == LOW) {
+    Serial.println("[IMU] I2C bus stuck LOW (pins shorted or missing pullups) — disabling IMU.");
+    imuData.ok = false;
+    return false;
+  }
+
+  Wire.begin(MPU_SDA_PIN, MPU_SCL_PIN);    // SDA=GPIO21, SCL=GPIO22
+  Wire.setTimeOut(50); // Prevent I2C bus from blocking forever if MPU is disconnected
   Wire.setClock(100000); // 100 kHz — reliable for long wires
 
   // ── I2C scan ────────────────────────────────────────────────────
-  Serial.println("[I2C] Scanning bus (SDA=GPIO21, SCL=GPIO22)...");
+#ifdef DEBUG
+  Serial.printf("[I2C] Scanning bus (SDA=GPIO%d, SCL=GPIO%d)...\n", MPU_SDA_PIN, MPU_SCL_PIN);
+#endif
   int found = 0;
   for (uint8_t addr = 1; addr < 127; addr++) {
     Wire.beginTransmission(addr);
     if (Wire.endTransmission() == 0) {
+#ifdef DEBUG
       Serial.printf("[I2C]  0x%02X", addr);
       if (addr == 0x68 || addr == 0x69) Serial.print(" <- MPU6050");
       Serial.println();
+#endif
       found++;
     }
   }
   if (!found) {
+#ifdef DEBUG
     Serial.println("[I2C]  Nothing found — check wiring!");
+#endif
     imuData.ok = false;
     return false;
   }
 
   // ── WHO_AM_I (informational only — don't gate on it) ─────────────
   uint8_t whoami = readReg(REG_WHO_AM_I);
+#ifdef DEBUG
   Serial.printf("[IMU] WHO_AM_I = 0x%02X ", whoami);
   if      (whoami == 0x68) Serial.println("(genuine MPU6050)");
   else if (whoami == 0x72) Serial.println("(clone — still works)");
   else if (whoami == 0x70) Serial.println("(clone — still works)");
   else                      Serial.printf ("(clone 0x%02X — still works)\n", whoami);
+#endif
 
   // ── Wake up & configure ──────────────────────────────────────────
   writeReg(REG_PWR_MGMT, 0x00);  // clear SLEEP bit → wake up
@@ -89,25 +108,24 @@ bool initIMU() {
   // Verify it responds properly to a read-back
   uint8_t pw = readReg(REG_PWR_MGMT);
   if (pw == 0xFF) {  // 0xFF = no ACK / bus error
+#ifdef DEBUG
     Serial.println("[IMU] Bus read failed after init — IMU disabled.");
+#endif
     imuData.ok = false;
     return false;
   }
 
   imuData.ok = true;
+#ifdef DEBUG
   Serial.println("[IMU] MPU6050 OK — raw Wire driver active.");
+#endif
   return true;
 }
 
 // ── readIMU ─────────────────────────────────────────────────────────
 void readIMU() {
   if (!imuData.ok) {
-    static unsigned long lastWarn = 0;
-    if (millis() - lastWarn >= 5000) {
-      lastWarn = millis();
-      Serial.println("[IMU] Sensor offline — check wiring.");
-    }
-    return;
+    return; // Quietly return if IMU is offline
   }
 
   // Request 14 bytes starting at ACCEL_XOUT_H:
@@ -151,6 +169,7 @@ void readIMU() {
                   * (180.0f / M_PI);
 
   // ── Serial print ────────────────────────────────────────────────
+#ifdef DEBUG
   Serial.printf(
     "[IMU] Pitch:%6.1f  Roll:%6.1f  "
     "Ax:%6.2f  Ay:%6.2f  Az:%6.2f  "
@@ -161,4 +180,5 @@ void readIMU() {
     imuData.gx,    imuData.gy,    imuData.gz,
     imuData.temp
   );
+#endif
 }

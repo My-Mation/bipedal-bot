@@ -9,7 +9,7 @@
 #include <Arduino.h>
 
 // ---------------- Pin configuration ----------------
-static const int PIN_POT   = 34;   // ADC input, potentiometer wiper
+static const int PIN_POT   = 33;   // ADC input, potentiometer wiper (GPIO33)
 static const int PIN_IN1   = 18;   // MX1508 IN1 (PWM)
 static const int PIN_IN2   = 19;   // MX1508 IN2 (PWM)
 
