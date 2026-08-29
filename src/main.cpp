@@ -128,49 +128,10 @@ void setup() {
   Serial.println("==================================================");
 }
 
-enum AutoMotionState { STATE_SITTING_DOWN, STATE_WAIT_SIT, STATE_STANDING_UP, STATE_WAIT_STAND };
-static AutoMotionState autoState = STATE_SITTING_DOWN;
-static unsigned long stateTimer = 0;
-
-static void runContinuousSitStand() {
-  unsigned long now = millis();
-  
-  switch (autoState) {
-    case STATE_SITTING_DOWN:
-      Serial.println("[AUTO] Moving all 6 servos to SIT position...");
-      sitDown();
-      stateTimer = now;
-      autoState = STATE_WAIT_SIT;
-      break;
-
-    case STATE_WAIT_SIT:
-      // Hold sit position for 3.0 seconds, then transition to standing
-      if (now - stateTimer >= 3000) {
-        autoState = STATE_STANDING_UP;
-      }
-      break;
-
-    case STATE_STANDING_UP:
-      Serial.println("[AUTO] Moving all 6 servos to STAND (HOME) position...");
-      goHomeAll();
-      stateTimer = now;
-      autoState = STATE_WAIT_STAND;
-      break;
-
-    case STATE_WAIT_STAND:
-      // Hold stand position for 3.0 seconds, then transition to sitting
-      if (now - stateTimer >= 3000) {
-        autoState = STATE_SITTING_DOWN;
-      }
-      break;
-  }
-}
-
 void loop() {
   processSerialCommands();   // Read interactive commands from Serial Monitor
   updateServos();            // servo_engine: advance all servos one tick
   motionTick();              // motion_queue: pop + start next command if idle
-  runContinuousSitStand();   // Continuous sit & stand demo loop
   tickWebSocket();           // ws_manager: cleanup stale clients, heartbeat check
   readIMU();                 // imu: sample sensors
   readGPS();                 // gps: process UART2 GPS stream
