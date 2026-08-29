@@ -73,23 +73,23 @@ inline constexpr float BAT_EMPTY_V      = 6.00f; // 2S Li-ion cutoff voltage
 //       S3 (Smart Servo) uses RAW ADC COUNTS (0–4095) — NOT µs.
 // ---------------------------------------------------------------
 //                                S1     S2     S3     S4    S5     S6
-inline constexpr int HOME_POS[NUM_SERVOS] = {2350, 1800, 2000, 2350, 2500, 2500};
+inline constexpr int HOME_POS[NUM_SERVOS] = {2350,  650, 2000, 1170, 2500, 2500};
 
 // ---------------------------------------------------------------
 // Maximum safe lift position for each leg servo.
 // S3 value is in ADC counts (0–4095); all others are µs.
 // ---------------------------------------------------------------
 //                                  S1     S2     S3    S4     S5     S6
-inline constexpr int LIFT_POS[NUM_SERVOS] = {1000,  650, 1000, 1170, 2500, 2500};
+inline constexpr int LIFT_POS[NUM_SERVOS] = {1000, 1800, 1000, 2350, 2500, 2500};
 
 // ---------------------------------------------------------------
 // Sit position — all legs folded, body lowered to ground (µs)
 // ---------------------------------------------------------------
 inline constexpr int SIT_POS[NUM_SERVOS] = {
     1000,   // S1 — Front-Left  leg fully bent
-    650,    // S2 — Back-Right  leg fully bent
+    1800,   // S2 — Back-Right  leg fully bent
     75,     // S3 — Front-Right leg fully bent (Smart Servo ADC)
-    1170,   // S4 — Back-Left   leg fully bent
+    2350,   // S4 — Back-Left   leg fully bent
     2500,   // S5 — Slider at home
     2500    // S6 — Rotator at home
 };
