@@ -209,7 +209,7 @@ void updateServos() {
       long absErr  = labs(error);
       int  out     = 0;
 
-      if (raw < 50 || raw > 4040 || absErr <= s3_DEADBAND) {
+      if (raw < 15 || raw > 4080 || absErr <= s3_DEADBAND) {
         s3_integral = 0;
         s3_outputPwm = 0;
         s3_driveMotor(0);
