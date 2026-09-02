@@ -23,16 +23,16 @@
 // ---------------------------------------------------------------
 // Servo 1 (S1) Front-Left:  GPIO13
 // Servo 2 (S2) Back-Right:  GPIO14
-// Servo 3 (S3) Front-Right: Smart Servo (IN1=GPIO18, IN2=GPIO19, POT=GPIO34) -> -1 in PWM array
+// Servo 3 (S3) Front-Right: Smart Servo (IN1=GPIO18, IN2=GPIO19, POT=GPIO33) -> -1 in PWM array
 // Servo 4 (S4) Back-Left:   GPIO26
 // Servo 5 (S5) Slider:      GPIO25
-// Servo 6 (S6) Rotator:     GPIO32
-inline constexpr int SERVO_PINS[NUM_SERVOS] = {13, 14, -1, 26, 25, 32};
+// Servo 6 (S6) Rotator:     GPIO27
+inline constexpr int SERVO_PINS[NUM_SERVOS] = {13, 14, -1, 26, 25, 27};
 
 // ---------------------------------------------------------------
 // S3 Smart Servo (MX1508 + Potentiometer) Pins
 // ---------------------------------------------------------------
-inline constexpr int S3_PIN_POT = 34; // Internal potentiometer wiper / position feedback (GPIO34)
+inline constexpr int S3_PIN_POT = 33; // Internal potentiometer wiper / position feedback (GPIO33)
 inline constexpr int S3_PIN_IN1 = 18; // Motor driver IN1 (PWM)
 inline constexpr int S3_PIN_IN2 = 19; // Motor driver IN2 (PWM)
 
@@ -45,8 +45,8 @@ inline constexpr int MPU_SCL_PIN = 22;
 // ---------------------------------------------------------------
 // GPS — GY-GPS6MV2 Pins (UART2)
 // ---------------------------------------------------------------
-inline constexpr int GPS_RX_PIN = 16; // ESP32 RX2 (connects to GPS TX)
-inline constexpr int GPS_TX_PIN = 17; // ESP32 TX2 (connects to GPS RX)
+inline constexpr int GPS_RX_PIN = 4;  // ESP32 GPIO4 (connects to GPS TX)
+inline constexpr int GPS_TX_PIN = 17; // ESP32 GPIO17 (UART2 TX pin, can leave disconnected)
 inline constexpr uint32_t GPS_BAUD = 9600;
 
 // ---------------------------------------------------------------
@@ -55,9 +55,9 @@ inline constexpr uint32_t GPS_BAUD = 9600;
 inline constexpr int BUZZER_PIN = 23; // Active HIGH control to BC548B base
 
 // ---------------------------------------------------------------
-// Headlight / Action Status Indicator Pin (GPIO33)
+// Headlight / Action Status Indicator Pin (-1 if disabled)
 // ---------------------------------------------------------------
-inline constexpr int LIGHT_PIN = 33;
+inline constexpr int LIGHT_PIN = 32; // GPIO32 Headlight / Action Status LED
 
 // ---------------------------------------------------------------
 // Battery Voltage Monitor — RESERVED FOR FUTURE (NOT ACTIVE CURRENTLY)
@@ -73,14 +73,14 @@ inline constexpr float BAT_EMPTY_V      = 6.00f; // 2S Li-ion cutoff voltage
 //       S3 (Smart Servo) uses RAW ADC COUNTS (0–4095) — NOT µs.
 // ---------------------------------------------------------------
 //                                S1     S2     S3     S4    S5     S6
-inline constexpr int HOME_POS[NUM_SERVOS] = {2350,  650, 2000, 2350, 2500, 2500};
+inline constexpr int HOME_POS[NUM_SERVOS] = {2350,  650, 1950, 2350, 2500, 2500};
 
 // ---------------------------------------------------------------
 // Maximum safe lift position for each leg servo.
 // S3 value is in ADC counts (0–4095); all others are µs.
 // ---------------------------------------------------------------
 //                                  S1     S2     S3    S4     S5     S6
-inline constexpr int LIFT_POS[NUM_SERVOS] = {1000, 1800, 1000, 1170, 2500, 2500};
+inline constexpr int LIFT_POS[NUM_SERVOS] = {1000, 1800, 2800, 1170, 2500, 2500};
 
 // ---------------------------------------------------------------
 // Sit position — all legs folded, body lowered to ground (µs)
@@ -88,7 +88,7 @@ inline constexpr int LIFT_POS[NUM_SERVOS] = {1000, 1800, 1000, 1170, 2500, 2500}
 inline constexpr int SIT_POS[NUM_SERVOS] = {
     1000,   // S1 — Front-Left  leg fully bent
     1800,   // S2 — Back-Right  leg fully bent
-    75,     // S3 — Front-Right leg fully bent (Smart Servo ADC)
+    3700,   // S3 — Front-Right leg fully bent (Smart Servo ADC)
     1170,   // S4 — Back-Left   leg fully bent
     2500,   // S5 — Slider at home
     2500    // S6 — Rotator at home
@@ -118,15 +118,15 @@ inline constexpr int MAX_POS[NUM_SERVOS] = {2500, 2500, 3950, 2500, 2500, 2500};
 // servoReached() for S3 uses abs(current - target) <= this value
 // instead of strict equality, because the ADC is noisy.
 // ---------------------------------------------------------------
-inline constexpr int S3_REACHED_DEADBAND = 30;  // ADC counts (~0.7 % of 4095)
+inline constexpr int S3_REACHED_DEADBAND = 20;  // ADC counts (~0.5 % of 4095)
 
 // ---------------------------------------------------------------
-// Motion-engine tuning
+// Motion-engine tuning (Fast, snappy & smooth)
 // ---------------------------------------------------------------
-inline constexpr int           STEP_SIZE        = 4;   // µs moved per motion tick (smooth, no jerk)
-inline constexpr unsigned long DEFAULT_INTERVAL = 4;   // ms between ticks (smooth interpolation)
-inline constexpr unsigned long MIN_INTERVAL     = 2;   // fastest speed (+)
-inline constexpr unsigned long MAX_INTERVAL     = 20;  // slowest speed (-)
+inline constexpr int           STEP_SIZE        = 25;  // µs moved per motion tick (snappy & responsive)
+inline constexpr unsigned long DEFAULT_INTERVAL = 3;   // ms between ticks
+inline constexpr unsigned long MIN_INTERVAL     = 1;   // fastest speed (100%)
+inline constexpr unsigned long MAX_INTERVAL     = 10;  // slowest speed (1%)
 
 // ---------------------------------------------------------------
 // Gait timing
@@ -141,5 +141,5 @@ inline constexpr int MOTION_QUEUE_SIZE = 32;  // max queued move commands
 // ---------------------------------------------------------------
 // Heartbeat safety
 // ---------------------------------------------------------------
-inline constexpr unsigned long HEARTBEAT_TIMEOUT_MS  = 1500; // ms without heartbeat → ESTOP
-inline constexpr unsigned long DISCONNECT_GRACE_MS   = 2000; // ms after WS disconnect before ESTOP
+inline constexpr unsigned long HEARTBEAT_TIMEOUT_MS  = 3000; // ms without heartbeat → ESTOP (3s margin)
+inline constexpr unsigned long DISCONNECT_GRACE_MS   = 3000; // ms after WS disconnect before ESTOP

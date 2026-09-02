@@ -170,15 +170,19 @@ void readIMU() {
 
   // ── Serial print ────────────────────────────────────────────────
 #ifdef DEBUG
-  Serial.printf(
-    "[IMU] Pitch:%6.1f  Roll:%6.1f  "
-    "Ax:%6.2f  Ay:%6.2f  Az:%6.2f  "
-    "Gx:%6.3f  Gy:%6.3f  Gz:%6.3f  "
-    "T:%4.1fC\n",
-    imuData.pitch, imuData.roll,
-    imuData.ax,    imuData.ay,    imuData.az,
-    imuData.gx,    imuData.gy,    imuData.gz,
-    imuData.temp
-  );
+  static unsigned long lastImuPrintMs = 0;
+  if (millis() - lastImuPrintMs >= 2000) {
+    lastImuPrintMs = millis();
+    Serial.printf(
+      "[IMU] Pitch:%6.1f  Roll:%6.1f  "
+      "Ax:%6.2f  Ay:%6.2f  Az:%6.2f  "
+      "Gx:%6.3f  Gy:%6.3f  Gz:%6.3f  "
+      "T:%4.1fC\n",
+      imuData.pitch, imuData.roll,
+      imuData.ax,    imuData.ay,    imuData.az,
+      imuData.gx,    imuData.gy,    imuData.gz,
+      imuData.temp
+    );
+  }
 #endif
 }

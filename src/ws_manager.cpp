@@ -2,6 +2,7 @@
 #include "cmd_parser.h"
 #include "motion_queue.h"
 #include "config.h"
+#include "buzzer.h"
 #include <Arduino.h>
 
 static AsyncWebSocket ws("/ws");
@@ -31,25 +32,43 @@ static void onWsEvent(AsyncWebSocket* server, AsyncWebSocketClient* client,
   switch (type) {
     case WS_EVT_CONNECT:
 #ifdef DEBUG
-      Serial.println("[WS] Client connected");
+      Serial.println("[WS] Phone Client connected");
 #endif
       clientConnected = true;
       markHeartbeat();
+      buzzerConnectedSignal(); // Beep when phone app connects to WebSocket!
       break;
 
     case WS_EVT_DISCONNECT:
 #ifdef DEBUG
-      Serial.println("[WS] Client disconnected");
+      Serial.println("[WS] Phone Client disconnected");
 #endif
       disconnectTime = millis();
       clientConnected = false;
+      buzzerDisconnectedSignal(); // Beep when phone app disconnects!
       break;
 
     case WS_EVT_DATA: {
       AwsFrameInfo* info = (AwsFrameInfo*)arg;
-      if (info->final && info->index == 0 && info->len == len && info->opcode == WS_TEXT) {
-        data[len] = 0; // null terminate safely
-        parseCommand((const char*)data, len);
+      if (info->opcode == WS_TEXT) {
+        markHeartbeat(); // Any incoming WS frame keeps heartbeat alive
+        if (info->final && info->index == 0 && info->len == len) {
+          data[len] = 0; // null terminate safely
+          parseCommand((const char*)data, len);
+        } else {
+          // Reassemble fragmented frames safely
+          static char wsRxBuf[1024];
+          if (info->index == 0) {
+            wsRxBuf[0] = '\0';
+          }
+          if (info->index + len < sizeof(wsRxBuf)) {
+            memcpy(wsRxBuf + info->index, data, len);
+            wsRxBuf[info->index + len] = '\0';
+          }
+          if (info->index + len == info->len) {
+            parseCommand(wsRxBuf, info->len);
+          }
+        }
       }
       break;
     }
@@ -81,9 +100,6 @@ void tickWebSocket() {
       Serial.println("[WS] Heartbeat lost -> ESTOP");
 #endif
       motionEStop();
-      // To prevent continuous triggering, fake a heartbeat or set a flag,
-      // but since we keep checking, ESTOP will just repeatedly run until heartbeat resumes or disconnects.
-      // Better to just update heartbeat to now so it triggers again in 3s if still no data.
       markHeartbeat(); 
   }
 }

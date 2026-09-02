@@ -9,12 +9,13 @@
 // =====================================================================
 
 struct GpsData {
-  float latitude  = 0.0f;
-  float longitude = 0.0f;
-  float altitude  = 0.0f;
-  float speed     = 0.0f;
-  int   satellites= 0;
-  bool  valid     = false;
+  double latitude  = 0.0;
+  double longitude = 0.0;
+  float  altitude  = 0.0f;
+  float  speed     = 0.0f;
+  float  hdop      = 0.0f;
+  int    satellites= 0;
+  bool   valid     = false;
 };
 
 extern GpsData gpsData;

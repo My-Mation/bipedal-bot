@@ -7,6 +7,15 @@
 #include <ArduinoJson.h>
 #include <Arduino.h>
 
+static void queueStep(int servoIdx, int pos1, int pos2) {
+  MotionCmd cmd1 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
+  MotionCmd cmd2 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
+  cmd1.targetPos[servoIdx] = pos1;
+  cmd2.targetPos[servoIdx] = pos2;
+  motionEnqueue(cmd1);
+  motionEnqueue(cmd2);
+}
+
 void parseCommand(const char* data, size_t len) {
   JsonDocument doc;
   DeserializationError err = deserializeJson(doc, data, len);
@@ -31,17 +40,46 @@ void parseCommand(const char* data, size_t len) {
     int duration = doc["duration"] | 100;
     buzzerBeep(duration);
   }
+  else if (strcmp(type, "light") == 0) {
+    if (doc["state"].is<bool>()) {
+      setLightState(doc["state"].as<bool>());
+    } else if (doc["toggle"].is<bool>() && doc["toggle"].as<bool>()) {
+      setLightState(!getLightState());
+    } else {
+      setLightState(!getLightState()); // default toggle if no extra key
+    }
+    char buf[64];
+    snprintf(buf, sizeof(buf), "{\"type\":\"event\",\"event\":\"lightState\",\"state\":%s}",
+             getLightState() ? "true" : "false");
+    wsSendAll(buf);
+  }
   else if (strcmp(type, "estop") == 0) {
     motionEStop();
   }
-  else if (strcmp(type, "home") == 0) {
+  else if (strcmp(type, "home") == 0 || strcmp(type, "stand") == 0) {
     motionGoHome();
   }
   else if (strcmp(type, "sit") == 0) {
     sitDown();
   }
-  else if (strcmp(type, "auto") == 0) {
-    // Enable/disable continuous auto sit-stand mode
+  else if (strcmp(type, "forward") == 0) {
+    queueStep(4, SLIDE_FORWARD, SLIDE_HOME); // S5 Slider
+  }
+  else if (strcmp(type, "backward") == 0) {
+    queueStep(4, 3000, SLIDE_HOME); // S5 Slider
+  }
+  else if (strcmp(type, "left") == 0) {
+    queueStep(5, ROTATE_TURN, ROTATE_HOME); // S6 Rotator
+  }
+  else if (strcmp(type, "right") == 0) {
+    queueStep(5, 3300, ROTATE_HOME); // S6 Rotator
+  }
+  else if (strcmp(type, "walk") == 0) {
+    const char* dir = doc["dir"] | doc["direction"] | "forward";
+    if (strcmp(dir, "forward") == 0)      queueStep(4, SLIDE_FORWARD, SLIDE_HOME);
+    else if (strcmp(dir, "backward") == 0) queueStep(4, 3000, SLIDE_HOME);
+    else if (strcmp(dir, "left") == 0)     queueStep(5, ROTATE_TURN, ROTATE_HOME);
+    else if (strcmp(dir, "right") == 0)    queueStep(5, 3300, ROTATE_HOME);
   }
   else if (strcmp(type, "clearQueue") == 0) {
     motionClearQueue();

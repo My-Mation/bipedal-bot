@@ -70,6 +70,15 @@ void goHomeAll();
 void sitDown();
 
 // ---------------------------------------------------------------
+// S3 Smart Servo Inspection & Control Helpers
+// ---------------------------------------------------------------
+void getS3DebugInfo(long &rawAdc, long &filteredAdc, long &error, int &outputPwm, bool &locked, bool &inverted, bool &stalled);
+void s3SetInverted(bool inv);
+bool s3GetInverted();
+void s3ToggleInverted();
+void s3SetGains(float kp, float ki, float kd, int minPwm, int deadband);
+
+// ---------------------------------------------------------------
 // Print current positions to Serial.
 // ---------------------------------------------------------------
 void printPositions();

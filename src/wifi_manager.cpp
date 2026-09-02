@@ -1,5 +1,6 @@
 #include <WiFi.h>
 #include "wifi_manager.h"
+#include "buzzer.h"
 #include <Arduino.h>
 
 #define AP_SSID "BipedBot"
@@ -23,6 +24,7 @@ void initWiFiAP() {
     Serial.printf("SSID    : %s\n", AP_SSID);
     Serial.printf("PASS    : %s\n", AP_PASS);
     Serial.printf("IP ADDR : http://%s\n", WiFi.softAPIP().toString().c_str());
+    buzzerWifiReadySignal(); // Beep to indicate Wi-Fi AP is started and ready
   } else {
     Serial.println("ERROR: Failed to start Wi-Fi Hotspot!");
   }

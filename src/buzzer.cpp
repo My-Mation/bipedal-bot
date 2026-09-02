@@ -23,3 +23,17 @@ void buzzerBeep(unsigned int durationMs) {
   delay(durationMs);
   digitalWrite(BUZZER_PIN, LOW);
 }
+
+void buzzerWifiReadySignal() {
+  buzzerBeep(120);
+}
+
+void buzzerConnectedSignal() {
+  buzzerBeep(70);
+  delay(50);
+  buzzerBeep(70);
+}
+
+void buzzerDisconnectedSignal() {
+  buzzerBeep(300);
+}

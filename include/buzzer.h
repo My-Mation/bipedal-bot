@@ -12,3 +12,8 @@ void initBuzzer();
 void buzzerOn();
 void buzzerOff();
 void buzzerBeep(unsigned int durationMs = 100);
+
+// Audio Signals for Events
+void buzzerWifiReadySignal();
+void buzzerConnectedSignal();
+void buzzerDisconnectedSignal();
