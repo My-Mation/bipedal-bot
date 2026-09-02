@@ -7,13 +7,47 @@
 #include <ArduinoJson.h>
 #include <Arduino.h>
 
-static void queueStep(int servoIdx, int pos1, int pos2) {
-  MotionCmd cmd1 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
-  MotionCmd cmd2 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
-  cmd1.targetPos[servoIdx] = pos1;
-  cmd2.targetPos[servoIdx] = pos2;
-  motionEnqueue(cmd1);
-  motionEnqueue(cmd2);
+// ---------------------------------------------------------------
+// Helper: Enqueue the 6-step diagonal walking gait cycle
+// ---------------------------------------------------------------
+//  Step 0: Lift Pair First  (e.g., S1 & S2)
+//  Step 1: Move Actuator   (e.g., S5 Slider forward to SLIDE_FORWARD)
+//  Step 2: Lower Pair First (S1 & S2 down to HOME)
+//  Step 3: Lift Pair Second (e.g., S3 & S4)
+//  Step 4: Return Actuator  (S5 Slider back to SLIDE_HOME)
+//  Step 5: Lower Pair Second (S3 & S4 down to HOME)
+// ---------------------------------------------------------------
+static void queueGaitCycle(int pairFirstA,  int pairFirstB,
+                           int pairSecondA, int pairSecondB,
+                           int moveServoIdx, int seqA, int seqB) {
+  MotionCmd step0 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
+  step0.targetPos[pairFirstA] = LIFT_POS[pairFirstA];
+  step0.targetPos[pairFirstB] = LIFT_POS[pairFirstB];
+
+  MotionCmd step1 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
+  step1.targetPos[moveServoIdx] = seqA;
+
+  MotionCmd step2 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
+  step2.targetPos[pairFirstA] = HOME_POS[pairFirstA];
+  step2.targetPos[pairFirstB] = HOME_POS[pairFirstB];
+
+  MotionCmd step3 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
+  step3.targetPos[pairSecondA] = LIFT_POS[pairSecondA];
+  step3.targetPos[pairSecondB] = LIFT_POS[pairSecondB];
+
+  MotionCmd step4 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
+  step4.targetPos[moveServoIdx] = seqB;
+
+  MotionCmd step5 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
+  step5.targetPos[pairSecondA] = HOME_POS[pairSecondA];
+  step5.targetPos[pairSecondB] = HOME_POS[pairSecondB];
+
+  motionEnqueue(step0);
+  motionEnqueue(step1);
+  motionEnqueue(step2);
+  motionEnqueue(step3);
+  motionEnqueue(step4);
+  motionEnqueue(step5);
 }
 
 void parseCommand(const char* data, size_t len) {
@@ -63,23 +97,23 @@ void parseCommand(const char* data, size_t len) {
     sitDown();
   }
   else if (strcmp(type, "forward") == 0) {
-    queueStep(4, SLIDE_FORWARD, SLIDE_HOME); // S5 Slider
+    queueGaitCycle(S1, S2, S3, S4, S5, SLIDE_FORWARD, SLIDE_HOME);
   }
   else if (strcmp(type, "backward") == 0) {
-    queueStep(4, 3000, SLIDE_HOME); // S5 Slider
+    queueGaitCycle(S3, S4, S1, S2, S5, SLIDE_FORWARD, SLIDE_HOME);
   }
   else if (strcmp(type, "left") == 0) {
-    queueStep(5, ROTATE_TURN, ROTATE_HOME); // S6 Rotator
+    queueGaitCycle(S1, S2, S3, S4, S6, ROTATE_TURN, ROTATE_HOME);
   }
   else if (strcmp(type, "right") == 0) {
-    queueStep(5, 3300, ROTATE_HOME); // S6 Rotator
+    queueGaitCycle(S3, S4, S1, S2, S6, ROTATE_TURN, ROTATE_HOME);
   }
   else if (strcmp(type, "walk") == 0) {
     const char* dir = doc["dir"] | doc["direction"] | "forward";
-    if (strcmp(dir, "forward") == 0)      queueStep(4, SLIDE_FORWARD, SLIDE_HOME);
-    else if (strcmp(dir, "backward") == 0) queueStep(4, 3000, SLIDE_HOME);
-    else if (strcmp(dir, "left") == 0)     queueStep(5, ROTATE_TURN, ROTATE_HOME);
-    else if (strcmp(dir, "right") == 0)    queueStep(5, 3300, ROTATE_HOME);
+    if (strcmp(dir, "forward") == 0)      queueGaitCycle(S1, S2, S3, S4, S5, SLIDE_FORWARD, SLIDE_HOME);
+    else if (strcmp(dir, "backward") == 0) queueGaitCycle(S3, S4, S1, S2, S5, SLIDE_FORWARD, SLIDE_HOME);
+    else if (strcmp(dir, "left") == 0)     queueGaitCycle(S1, S2, S3, S4, S6, ROTATE_TURN, ROTATE_HOME);
+    else if (strcmp(dir, "right") == 0)    queueGaitCycle(S3, S4, S1, S2, S6, ROTATE_TURN, ROTATE_HOME);
   }
   else if (strcmp(type, "clearQueue") == 0) {
     motionClearQueue();
