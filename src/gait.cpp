@@ -22,6 +22,7 @@ static int           gaitStep      = 0;     // 0..5 within current gait cycle
 static bool          stepInitiated = false; // target for this step set?
 static bool          holding       = false; // post-move hold pause active?
 static unsigned long holdStart     = 0;
+static unsigned long stepStartTime = 0;
 
 // ---------------------------------------------------------------
 // Helper Functions
@@ -40,6 +41,7 @@ static void resetGait() {
   gaitStep      = 0;
   stepInitiated = false;
   holding       = false;
+  stepStartTime = 0;
 }
 
 // ---------------------------------------------------------------
@@ -54,33 +56,35 @@ static void runGaitCycle(int pairFirstA,  int pairFirstB,
 
   switch (gaitStep) {
     case 0:
-      if (!stepInitiated) { liftPair(pairFirstA, pairFirstB); stepInitiated = true; }
+      if (!stepInitiated) { liftPair(pairFirstA, pairFirstB); stepInitiated = true; stepStartTime = millis(); }
       checkA = pairFirstA; checkB = pairFirstB;
       break;
     case 1:
-      if (!stepInitiated) { setTarget(moveServoIdx, seqA); stepInitiated = true; }
+      if (!stepInitiated) { setTarget(moveServoIdx, seqA); stepInitiated = true; stepStartTime = millis(); }
       checkA = moveServoIdx; singleCheck = true;
       break;
     case 2:
-      if (!stepInitiated) { lowerPair(pairFirstA, pairFirstB); stepInitiated = true; }
+      if (!stepInitiated) { lowerPair(pairFirstA, pairFirstB); stepInitiated = true; stepStartTime = millis(); }
       checkA = pairFirstA; checkB = pairFirstB;
       break;
     case 3:
-      if (!stepInitiated) { liftPair(pairSecondA, pairSecondB); stepInitiated = true; }
+      if (!stepInitiated) { liftPair(pairSecondA, pairSecondB); stepInitiated = true; stepStartTime = millis(); }
       checkA = pairSecondA; checkB = pairSecondB;
       break;
     case 4:
-      if (!stepInitiated) { setTarget(moveServoIdx, seqB); stepInitiated = true; }
+      if (!stepInitiated) { setTarget(moveServoIdx, seqB); stepInitiated = true; stepStartTime = millis(); }
       checkA = moveServoIdx; singleCheck = true;
       break;
     case 5:
-      if (!stepInitiated) { lowerPair(pairSecondA, pairSecondB); stepInitiated = true; }
+      if (!stepInitiated) { lowerPair(pairSecondA, pairSecondB); stepInitiated = true; stepStartTime = millis(); }
       checkA = pairSecondA; checkB = pairSecondB;
       break;
   }
 
-  // Has this step's motion completed?
-  bool reached = singleCheck ? servoReached(checkA) : pairReached(checkA, checkB);
+  // Has this step's motion completed or timed out?
+  bool motionReached = singleCheck ? servoReached(checkA) : pairReached(checkA, checkB);
+  bool timeout = (stepInitiated && (millis() - stepStartTime >= 600));
+  bool reached = motionReached || timeout;
 
   // Start the hold timer when target is reached
   if (reached && !holding) {

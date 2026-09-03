@@ -1,6 +1,7 @@
 #include "motion_queue.h"
 #include "servo_engine.h"
 #include "ws_manager.h"
+#include "gait.h"
 #include <Arduino.h>
 
 static MotionCmd queue[MOTION_QUEUE_SIZE];
@@ -78,7 +79,7 @@ int motionQueueSize() {
 }
 
 bool isMotionExecuting() {
-  return executing || qCount > 0 || !allServosIdle();
+  return executing || qCount > 0 || state != STATE_IDLE || !allServosIdle();
 }
 
 void motionTick() {
@@ -103,8 +104,10 @@ void motionTick() {
       }
       // Finished
       if (currentCmdId != -1) {
-        char buf[64];
+        char buf[80];
         snprintf(buf, sizeof(buf), "{\"type\":\"finished\",\"id\":%ld}", currentCmdId);
+        wsSendAll(buf);
+        snprintf(buf, sizeof(buf), "{\"type\":\"event\",\"event\":\"finished\",\"id\":%ld}", currentCmdId);
         wsSendAll(buf);
       }
       executing = false;

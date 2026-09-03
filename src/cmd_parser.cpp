@@ -50,27 +50,35 @@ void parseCommand(const char* data, size_t len) {
     motionEStop();
   }
   else if (strcmp(type, "home") == 0 || strcmp(type, "stand") == 0) {
+    motionClearQueue();
     enterState(STATE_IDLE);
   }
   else if (strcmp(type, "sit") == 0) {
+    motionClearQueue();
     enterState(STATE_SIT);
   }
   else if (strcmp(type, "forward") == 0) {
+    motionClearQueue();
     enterState(STATE_WALK_FWD);
   }
   else if (strcmp(type, "backward") == 0) {
+    motionClearQueue();
     enterState(STATE_WALK_BWD);
   }
   else if (strcmp(type, "left") == 0) {
+    motionClearQueue();
     enterState(STATE_TURN_L);
   }
   else if (strcmp(type, "right") == 0) {
+    motionClearQueue();
     enterState(STATE_TURN_R);
   }
   else if (strcmp(type, "stop") == 0) {
+    motionClearQueue();
     enterState(STATE_IDLE);
   }
   else if (strcmp(type, "walk") == 0) {
+    motionClearQueue();
     const char* dir = doc["dir"] | doc["direction"] | "forward";
     if (strcmp(dir, "forward") == 0)      enterState(STATE_WALK_FWD);
     else if (strcmp(dir, "backward") == 0) enterState(STATE_WALK_BWD);
@@ -83,6 +91,9 @@ void parseCommand(const char* data, size_t len) {
     motionClearQueue();
   }
   else if (strcmp(type, "move") == 0) {
+    if (state != STATE_IDLE) {
+      enterState(STATE_IDLE);
+    }
     MotionCmd cmd;
     cmd.id = doc["id"] | -1;
     
