@@ -4,51 +4,9 @@
 #include "ws_manager.h"
 #include "config.h"
 #include "buzzer.h"
+#include "gait.h"
 #include <ArduinoJson.h>
 #include <Arduino.h>
-
-// ---------------------------------------------------------------
-// Helper: Enqueue the 6-step diagonal walking gait cycle
-// ---------------------------------------------------------------
-//  Step 0: Lift Pair First  (e.g., S1 & S2)
-//  Step 1: Move Actuator   (e.g., S5 Slider forward to SLIDE_FORWARD)
-//  Step 2: Lower Pair First (S1 & S2 down to HOME)
-//  Step 3: Lift Pair Second (e.g., S3 & S4)
-//  Step 4: Return Actuator  (S5 Slider back to SLIDE_HOME)
-//  Step 5: Lower Pair Second (S3 & S4 down to HOME)
-// ---------------------------------------------------------------
-static void queueGaitCycle(int pairFirstA,  int pairFirstB,
-                           int pairSecondA, int pairSecondB,
-                           int moveServoIdx, int seqA, int seqB) {
-  MotionCmd step0 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
-  step0.targetPos[pairFirstA] = LIFT_POS[pairFirstA];
-  step0.targetPos[pairFirstB] = LIFT_POS[pairFirstB];
-
-  MotionCmd step1 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
-  step1.targetPos[moveServoIdx] = seqA;
-
-  MotionCmd step2 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
-  step2.targetPos[pairFirstA] = HOME_POS[pairFirstA];
-  step2.targetPos[pairFirstB] = HOME_POS[pairFirstB];
-
-  MotionCmd step3 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
-  step3.targetPos[pairSecondA] = LIFT_POS[pairSecondA];
-  step3.targetPos[pairSecondB] = LIFT_POS[pairSecondB];
-
-  MotionCmd step4 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
-  step4.targetPos[moveServoIdx] = seqB;
-
-  MotionCmd step5 = {-1, {-1, -1, -1, -1, -1, -1}, {100, 100, 100, 100, 100, 100}};
-  step5.targetPos[pairSecondA] = HOME_POS[pairSecondA];
-  step5.targetPos[pairSecondB] = HOME_POS[pairSecondB];
-
-  motionEnqueue(step0);
-  motionEnqueue(step1);
-  motionEnqueue(step2);
-  motionEnqueue(step3);
-  motionEnqueue(step4);
-  motionEnqueue(step5);
-}
 
 void parseCommand(const char* data, size_t len) {
   JsonDocument doc;
@@ -88,34 +46,40 @@ void parseCommand(const char* data, size_t len) {
     wsSendAll(buf);
   }
   else if (strcmp(type, "estop") == 0) {
+    enterState(STATE_IDLE);
     motionEStop();
   }
   else if (strcmp(type, "home") == 0 || strcmp(type, "stand") == 0) {
-    motionGoHome();
+    enterState(STATE_IDLE);
   }
   else if (strcmp(type, "sit") == 0) {
-    sitDown();
+    enterState(STATE_SIT);
   }
   else if (strcmp(type, "forward") == 0) {
-    queueGaitCycle(S1, S2, S3, S4, S5, SLIDE_FORWARD, SLIDE_HOME);
+    enterState(STATE_WALK_FWD);
   }
   else if (strcmp(type, "backward") == 0) {
-    queueGaitCycle(S3, S4, S1, S2, S5, SLIDE_FORWARD, SLIDE_HOME);
+    enterState(STATE_WALK_BWD);
   }
   else if (strcmp(type, "left") == 0) {
-    queueGaitCycle(S1, S2, S3, S4, S6, ROTATE_TURN, ROTATE_HOME);
+    enterState(STATE_TURN_L);
   }
   else if (strcmp(type, "right") == 0) {
-    queueGaitCycle(S3, S4, S1, S2, S6, ROTATE_TURN, ROTATE_HOME);
+    enterState(STATE_TURN_R);
+  }
+  else if (strcmp(type, "stop") == 0) {
+    enterState(STATE_IDLE);
   }
   else if (strcmp(type, "walk") == 0) {
     const char* dir = doc["dir"] | doc["direction"] | "forward";
-    if (strcmp(dir, "forward") == 0)      queueGaitCycle(S1, S2, S3, S4, S5, SLIDE_FORWARD, SLIDE_HOME);
-    else if (strcmp(dir, "backward") == 0) queueGaitCycle(S3, S4, S1, S2, S5, SLIDE_FORWARD, SLIDE_HOME);
-    else if (strcmp(dir, "left") == 0)     queueGaitCycle(S1, S2, S3, S4, S6, ROTATE_TURN, ROTATE_HOME);
-    else if (strcmp(dir, "right") == 0)    queueGaitCycle(S3, S4, S1, S2, S6, ROTATE_TURN, ROTATE_HOME);
+    if (strcmp(dir, "forward") == 0)      enterState(STATE_WALK_FWD);
+    else if (strcmp(dir, "backward") == 0) enterState(STATE_WALK_BWD);
+    else if (strcmp(dir, "left") == 0)     enterState(STATE_TURN_L);
+    else if (strcmp(dir, "right") == 0)    enterState(STATE_TURN_R);
+    else if (strcmp(dir, "stop") == 0)     enterState(STATE_IDLE);
   }
   else if (strcmp(type, "clearQueue") == 0) {
+    enterState(STATE_IDLE);
     motionClearQueue();
   }
   else if (strcmp(type, "move") == 0) {

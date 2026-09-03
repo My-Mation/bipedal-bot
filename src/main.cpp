@@ -10,6 +10,7 @@
 #include "config.h"
 #include "buzzer.h"
 #include "servo_engine.h"
+#include "gait.h"
 #include "imu.h"
 #include "gps_manager.h"
 #include "wifi_manager.h"
@@ -68,6 +69,7 @@ static void handleSerialCommand(String cmd) {
   }
   if (isNumber) {
     int target = cmd.toInt();
+    enterState(STATE_IDLE);
     motionClearQueue();
     setTarget(2, target);
     Serial.printf("\n>>> [S3 TARGET SET] Front-Right S3 moving to %d (clamped: %d)\n\n", target, clampPos(2, target));
@@ -92,11 +94,30 @@ static void handleSerialCommand(String cmd) {
     return;
   }
 
-  // 4. Stop command ("stop") -> hold current position
+  // 4. Direction & gait commands
+  if (cmd == "fwd" || cmd == "forward") {
+    Serial.println("\n>>> [GAIT] Entering continuous FORWARD walking state...");
+    enterState(STATE_WALK_FWD);
+    return;
+  }
+  if (cmd == "bwd" || cmd == "backward") {
+    Serial.println("\n>>> [GAIT] Entering continuous BACKWARD walking state...");
+    enterState(STATE_WALK_BWD);
+    return;
+  }
+  if (cmd == "left") {
+    Serial.println("\n>>> [GAIT] Entering continuous LEFT turn state...");
+    enterState(STATE_TURN_L);
+    return;
+  }
+  if (cmd == "right") {
+    Serial.println("\n>>> [GAIT] Entering continuous RIGHT turn state...");
+    enterState(STATE_TURN_R);
+    return;
+  }
   if (cmd == "stop") {
-    motionClearQueue();
-    setTarget(2, currentPos[2]);
-    Serial.printf("\n>>> [S3 STOP] Holding position at %d\n\n", currentPos[2]);
+    Serial.println("\n>>> [GAIT] Stopping walking gait -> IDLE...");
+    enterState(STATE_IDLE);
     return;
   }
 
@@ -105,6 +126,7 @@ static void handleSerialCommand(String cmd) {
   if (sscanf(cmd.c_str(), "%d %d", &servoNum, &posVal) == 2) {
     if (servoNum >= 1 && servoNum <= 6) {
       int idx = servoNum - 1;
+      enterState(STATE_IDLE);
       motionClearQueue();
       setTarget(idx, posVal);
       Serial.printf("\n>>> [TARGET SET] Servo S%d (GPIO %d) target set to %d (clamped: %d)\n\n",
@@ -118,6 +140,7 @@ static void handleSerialCommand(String cmd) {
   if (sscanf(cmd.c_str(), "s%d %d", &sIdx, &sPos) == 2) {
     if (sIdx >= 1 && sIdx <= 6) {
       int idx = sIdx - 1;
+      enterState(STATE_IDLE);
       motionClearQueue();
       setTarget(idx, sPos);
       Serial.printf("\n>>> [TARGET SET] Servo S%d (GPIO %d) target set to %d (clamped: %d)\n\n",
@@ -147,14 +170,14 @@ static void handleSerialCommand(String cmd) {
     testSingleServo(5);
   } else if (cmd == "home") {
     Serial.println("\n[TEST] Moving all servos to HOME stance...");
-    motionGoHome();
+    enterState(STATE_IDLE);
   } else if (cmd == "sit") {
     Serial.println("\n[TEST] Sitting down (all legs folded)...");
-    sitDown();
+    enterState(STATE_SIT);
   } else if (cmd == "status") {
     printPositions();
   } else {
-    Serial.printf("\n[HELP] Commands: 'light' to toggle GPIO32 LED, type a number (e.g. '2500') to move S3, 'inv', 'stop', 'home', 'sit', or '1'..'6'.\n\n");
+    Serial.printf("\n[HELP] Commands: 'fwd', 'bwd', 'left', 'right', 'stop', 'home', 'sit', 'light', or '1'..'6'.\n\n");
   }
 }
 
@@ -192,6 +215,7 @@ void setup() {
   initBattery();
   initServos();
   motionQueueInit();
+  enterState(STATE_IDLE);
 
   // 3. Initialize sensors
   initIMU();
@@ -202,19 +226,19 @@ void setup() {
   Serial.println("ESP32 Walking Bot - High-Performance Controller Ready!");
   Serial.println("==========================================================");
   Serial.println("Terminal Controls:");
+  Serial.println("  fwd / bwd    -> Continuous Walking Forward / Backward");
+  Serial.println("  left / right -> Continuous Turning Left / Right");
+  Serial.println("  stop / home  -> Stop Gait & Stand");
+  Serial.println("  sit          -> Sit Down");
   Serial.println("  light        -> Toggle Headlight on GPIO32");
-  Serial.println("  <number>     -> Move S3 Front-Right directly (e.g. 2500, 1500, 75)");
   Serial.println("  inv          -> Toggle S3 Motor Direction Polarity");
-  Serial.println("  stop         -> Hold S3 at current position");
-  Serial.println("  <servo> <pos>-> Move any servo (e.g. '1 1500', '5 2000')");
-  Serial.println("  1, 2, 3.. 6  -> Test individual servo");
-  Serial.println("  home / sit   -> Stance controls");
   Serial.println("==========================================================");
 }
 
 void loop() {
   processSerialCommands();   // Non-blocking serial command processor
   updateServos();            // servo_engine: advance all servos one tick (100Hz PID for S3)
+  runGait();                 // continuous 6-step diagonal-pair gait cycle engine
   motionTick();              // motion_queue: pop + start next command if idle
   tickWebSocket();           // ws_manager: cleanup stale clients, heartbeat check
   readIMU();                 // imu: sample sensors
@@ -237,6 +261,6 @@ void loop() {
 
   // Control Action Light (if assigned): HIGH if light state is ON OR executing motion
   if (LIGHT_PIN >= 0) {
-    digitalWrite(LIGHT_PIN, (g_lightState || isMotionExecuting()) ? HIGH : LOW);
+    digitalWrite(LIGHT_PIN, (g_lightState || isMotionExecuting() || state != STATE_IDLE) ? HIGH : LOW);
   }
 }
