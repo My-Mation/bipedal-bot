@@ -60,8 +60,22 @@ static void runGaitCycle(int pairFirstA,  int pairFirstB,
       checkA = pairFirstA; checkB = pairFirstB;
       break;
     case 1:
-      if (!stepInitiated) { setTarget(moveServoIdx, seqA); stepInitiated = true; stepStartTime = millis(); }
-      checkA = moveServoIdx; singleCheck = true;
+      if (!stepInitiated) {
+        setTarget(moveServoIdx, seqA);
+        if (moveServoIdx == S6) {
+          setTarget(S5, SLIDE_HOME);
+        }
+        stepInitiated = true;
+        stepStartTime = millis();
+      }
+      if (moveServoIdx == S6) {
+        checkA = S6;
+        checkB = S5;
+        singleCheck = false;
+      } else {
+        checkA = moveServoIdx;
+        singleCheck = true;
+      }
       break;
     case 2:
       if (!stepInitiated) { lowerPair(pairFirstA, pairFirstB); stepInitiated = true; stepStartTime = millis(); }
@@ -111,6 +125,8 @@ void enterState(RobotState newState) {
     sitDown();
   } else if (newState == STATE_IDLE) {
     goHomeAll();
+  } else if (newState == STATE_TURN_L || newState == STATE_TURN_R) {
+    setTarget(S5, SLIDE_HOME);
   }
 }
 
@@ -120,22 +136,22 @@ void enterState(RobotState newState) {
 void runGait() {
   switch (state) {
     case STATE_WALK_FWD:
-      // Diagonal A (S1+S2) leads; slider S5 drives FORWARD then returns HOME
+      // Walk Forward per walk-dummy.txt: Pair A (S1+S2) leads, S5 slides FORWARD then HOME
       runGaitCycle(S1, S2, S3, S4, S5, SLIDE_FORWARD, SLIDE_HOME);
       break;
 
     case STATE_WALK_BWD:
-      // Diagonal B (S3+S4) leads; slider S5 drives FORWARD then returns HOME
-      runGaitCycle(S3, S4, S1, S2, S5, SLIDE_FORWARD, SLIDE_HOME);
+      // Walk Backward per walk-dummy.txt: Pair A (S1+S2) leads, S5 slides HOME then FORWARD
+      runGaitCycle(S1, S2, S3, S4, S5, SLIDE_HOME, SLIDE_FORWARD);
       break;
 
     case STATE_TURN_L:
-      // Diagonal A leads; rotator S6 drives TURN then returns HOME
+      // Turn Left per walk-dummy.txt: Pair A (S1+S2) leads, S6 rotates TURN then HOME, S5 centered
       runGaitCycle(S1, S2, S3, S4, S6, ROTATE_TURN, ROTATE_HOME);
       break;
 
     case STATE_TURN_R:
-      // Diagonal B leads; rotator S6 drives TURN then returns HOME
+      // Turn Right per walk-dummy.txt: Pair B (S3+S4) leads, S6 rotates TURN then HOME, S5 centered
       runGaitCycle(S3, S4, S1, S2, S6, ROTATE_TURN, ROTATE_HOME);
       break;
 

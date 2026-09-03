@@ -80,7 +80,7 @@ inline constexpr int HOME_POS[NUM_SERVOS] = {2350,  650, 1950, 2350, 2500, 2500}
 // S3 value is in ADC counts (0–4095); all others are µs.
 // ---------------------------------------------------------------
 //                                  S1     S2     S3    S4     S5     S6
-inline constexpr int LIFT_POS[NUM_SERVOS] = {1000, 1800, 1000, 1170, 2500, 2500};
+inline constexpr int LIFT_POS[NUM_SERVOS] = {1000, 1800, 2800, 1170, 2500, 2500};
 
 // ---------------------------------------------------------------
 // Sit position — all legs folded, body lowered to ground (µs)
@@ -88,7 +88,7 @@ inline constexpr int LIFT_POS[NUM_SERVOS] = {1000, 1800, 1000, 1170, 2500, 2500}
 inline constexpr int SIT_POS[NUM_SERVOS] = {
     1000,   // S1 — Front-Left  leg fully bent
     1800,   // S2 — Back-Right  leg fully bent
-    75,     // S3 — Front-Right leg fully bent (Smart Servo ADC)
+    3700,   // S3 — Front-Right leg fully bent (Smart Servo ADC)
     1170,   // S4 — Back-Left   leg fully bent
     2500,   // S5 — Slider at home
     2500    // S6 — Rotator at home
@@ -98,7 +98,7 @@ inline constexpr int SIT_POS[NUM_SERVOS] = {
 // Slider (S5) waypoints
 // ---------------------------------------------------------------
 inline constexpr int SLIDE_HOME    = 2500;
-inline constexpr int SLIDE_FORWARD = 1250;   // extended forward stroke for bigger steps
+inline constexpr int SLIDE_FORWARD = 1450;   // max extension (user measured)
 
 // ---------------------------------------------------------------
 // Rotator (S6) waypoints
@@ -110,7 +110,7 @@ inline constexpr int ROTATE_TURN = 1700;
 // Hard safety clamps — positions are clamped to these before any
 // writeMicroseconds() call.  Prevents mechanical damage.
 // ---------------------------------------------------------------
-inline constexpr int MIN_POS[NUM_SERVOS] = {1000,  500,   50, 1170, 1200, 1700};
+inline constexpr int MIN_POS[NUM_SERVOS] = {1000,  500,   50, 1170, 1450, 1700};
 inline constexpr int MAX_POS[NUM_SERVOS] = {2500, 2500, 3950, 2500, 2500, 2500};
 
 // ---------------------------------------------------------------
@@ -118,7 +118,7 @@ inline constexpr int MAX_POS[NUM_SERVOS] = {2500, 2500, 3950, 2500, 2500, 2500};
 // servoReached() for S3 uses abs(current - target) <= this value
 // instead of strict equality, because the ADC is noisy.
 // ---------------------------------------------------------------
-inline constexpr int S3_REACHED_DEADBAND = 30;  // ADC counts (~0.7 % of 4095)
+inline constexpr int S3_REACHED_DEADBAND = 20;  // ADC counts (~0.5 % of 4095)
 
 // ---------------------------------------------------------------
 // Motion-engine tuning (Fast, snappy & smooth)

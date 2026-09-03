@@ -61,6 +61,7 @@ void motionClearQueue() {
 }
 
 void motionEStop() {
+  enterState(STATE_IDLE);
   motionClearQueue();
   executing = false;
   goHomeAll();
@@ -68,6 +69,7 @@ void motionEStop() {
 }
 
 void motionGoHome() {
+  enterState(STATE_IDLE);
   motionClearQueue();
   executing = false;
   goHomeAll();
